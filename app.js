@@ -13,6 +13,15 @@
   const STORAGE_KEY = "moy-budget-v2";
   const LEGACY_KEY = "liza-finance-v1";
   const ONBOARD_KEY = "moy-budget-onboarded";
+  const STREAK_BROKEN_KEY = "moy-budget-streak-soft";
+
+  const QUICK_CHIPS = [
+    { name: "Кофе", amount: 150, category: "food", icon: "☕" },
+    { name: "Транспорт", amount: 50, category: "transport", icon: "🚌" },
+    { name: "Продукты", amount: 500, category: "food", icon: "🛒" },
+  ];
+
+  const GOAL_MILESTONES = [25, 50, 100];
 
   const FREE_DAILY_OPS_LIMIT = 15;
   const MAX_REWARDS_PER_DAY = 5;
@@ -99,12 +108,14 @@
 
   function normalizeGoal(g) {
     if (!g || typeof g !== "object") return null;
-    return {
+    const out = {
       id: g.id || uid(),
       name: g.name || "Цель",
       target: Number(g.target) || 0,
       saved: Number(g.saved) || 0,
     };
+    if (g.demo) out.demo = true;
+    return out;
   }
 
   function normalizeGoals(parsed) {
@@ -128,12 +139,35 @@
     };
   }
 
+  function defaultEngagement() {
+    return {
+      streak: 0,
+      lastActiveDate: null,
+      milestones: {},
+      firstOpCelebrated: false,
+      demoActive: false,
+    };
+  }
+
+  function normalizeEngagement(e) {
+    const base = defaultEngagement();
+    if (!e || typeof e !== "object") return base;
+    return {
+      streak: Math.max(0, Number(e.streak) || 0),
+      lastActiveDate: e.lastActiveDate || null,
+      milestones: e.milestones && typeof e.milestones === "object" ? e.milestones : {},
+      firstOpCelebrated: !!e.firstOpCelebrated,
+      demoActive: !!e.demoActive,
+    };
+  }
+
   function defaultState() {
     return {
       incomes: [],
       expenses: [],
       goals: [],
       budgets: {},
+      engagement: defaultEngagement(),
       ...defaultMonetization(),
     };
   }
@@ -146,6 +180,7 @@
       amount: Number(i.amount) || 0,
       month: i.month || now,
       createdAt: i.createdAt || Date.now(),
+      demo: !!i.demo,
     }));
     const expenses = (Array.isArray(parsed.expenses) ? parsed.expenses : []).map((e) => ({
       id: e.id || uid(),
@@ -154,6 +189,7 @@
       category: e.category || "other",
       month: e.month || now,
       createdAt: e.createdAt || Date.now(),
+      demo: !!e.demo,
     }));
 
     const mon = defaultMonetization();
@@ -167,6 +203,7 @@
       expenses,
       goals: normalizeGoals(parsed),
       budgets: parsed.budgets && typeof parsed.budgets === "object" ? parsed.budgets : {},
+      engagement: normalizeEngagement(parsed.engagement),
       plan,
       adsEnabled: plan === "pro" ? false : parsed.adsEnabled !== false,
       dailyRewardedCount: Number(parsed.dailyRewardedCount) || 0,
@@ -230,6 +267,14 @@
   const elPlanDesc = $("#plan-desc");
   const elRewardStatus = $("#reward-status");
   const elSupportActions = $("#support-actions");
+  const elSpendToday = $("#spend-today");
+  const elSpendTodayValue = $("#spend-today-value");
+  const elInsight = $("#insight-line");
+  const elStreakBadge = $("#streak-badge");
+  const elStreakCount = $("#streak-count");
+  const elDemoBanner = $("#demo-banner");
+  const elCelebrate = $("#celebrate");
+  const elConfetti = $("#confetti-canvas");
 
   function escapeHtml(str) {
     return String(str)
@@ -239,13 +284,15 @@
       .replace(/"/g, "&quot;");
   }
 
-  function toast(msg) {
+  function toast(msg, soft) {
     elToast.textContent = msg;
+    elToast.classList.toggle("is-soft", !!soft);
     elToast.hidden = false;
     clearTimeout(toast._t);
     toast._t = setTimeout(() => {
       elToast.hidden = true;
-    }, 2200);
+      elToast.classList.remove("is-soft");
+    }, soft ? 3200 : 2200);
   }
 
   function categoryById(id) {
@@ -330,6 +377,185 @@
     elMonthLabel.textContent = monthFmt.format(parseMonthKey(currentMonth));
   }
 
+  function daysLeftInMonth(month) {
+    const d = parseMonthKey(month || currentMonth);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const last = new Date(y, m + 1, 0).getDate();
+    const today = new Date();
+    if (monthKey(today) !== (month || currentMonth)) {
+      // чужой месяц: все дни
+      return last;
+    }
+    return Math.max(1, last - today.getDate() + 1);
+  }
+
+  function yesterdayKey() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
+  function ensureEngagement() {
+    if (!state.engagement) state.engagement = defaultEngagement();
+    return state.engagement;
+  }
+
+  function touchStreak(fromOpen) {
+    const eng = ensureEngagement();
+    const today = todayKey();
+    const last = eng.lastActiveDate;
+    let softBreak = false;
+
+    if (last === today) {
+      // уже отмечен сегодня
+    } else if (last === yesterdayKey()) {
+      eng.streak = (eng.streak || 0) + 1;
+      eng.lastActiveDate = today;
+    } else if (!last) {
+      eng.streak = 1;
+      eng.lastActiveDate = today;
+    } else {
+      // серия сорвалась
+      if ((eng.streak || 0) > 1) softBreak = true;
+      eng.streak = 1;
+      eng.lastActiveDate = today;
+    }
+
+    if (softBreak && fromOpen) {
+      const shown = sessionStorage.getItem(STREAK_BROKEN_KEY);
+      if (!shown) {
+        sessionStorage.setItem(STREAK_BROKEN_KEY, "1");
+        toast("Новый старт — серия снова с 1. Без давления 💜", true);
+      }
+    }
+  }
+
+  function renderStreak() {
+    const eng = ensureEngagement();
+    const n = eng.streak || 0;
+    if (!elStreakBadge) return;
+    if (n >= 1 && eng.lastActiveDate === todayKey()) {
+      elStreakBadge.hidden = false;
+      elStreakCount.textContent = String(n);
+    } else if (n >= 1) {
+      elStreakBadge.hidden = false;
+      elStreakCount.textContent = String(n);
+    } else {
+      elStreakBadge.hidden = true;
+    }
+  }
+
+  function renderSpendToday() {
+    if (!elSpendTodayValue) return;
+    const { balance } = getTotals();
+    const days = daysLeftInMonth(currentMonth);
+    const isCurrent = currentMonth === monthKey(new Date());
+
+    elSpendToday.classList.remove("is-warn", "is-over");
+
+    if (!isCurrent) {
+      elSpendTodayValue.textContent = formatRub(balance) + " · месяц";
+      return;
+    }
+
+    if (balance <= 0) {
+      elSpendTodayValue.textContent = "0 ₽";
+      elSpendToday.classList.add("is-over");
+      return;
+    }
+
+    const daily = Math.floor(balance / days);
+    elSpendTodayValue.textContent = formatRub(daily);
+    if (daily < 300) elSpendToday.classList.add("is-warn");
+  }
+
+  function buildInsight() {
+    const { income, expense, balance } = getTotals();
+    const exps = monthExpenses();
+    const eng = ensureEngagement();
+
+    if (!income && !expense && !state.goals.length) {
+      return "Добавьте расход или цель — и появится инсайт дня";
+    }
+
+    // goal progress insight
+    if (state.goals.length) {
+      const g = state.goals[0];
+      const t = Number(g.target) || 0;
+      const s = Number(g.saved) || 0;
+      if (t > 0) {
+        const left = Math.max(t - s, 0);
+        const pct = Math.round((s / t) * 100);
+        if (pct >= 100) return "Цель «" + g.name + "» достигнута — красота!";
+        if (pct >= 50) return "Ближе к цели «" + g.name + "» — уже " + pct + "%";
+        if (s > 0) return "Ближе к цели на " + formatRub(s).replace(/\u00a0/g, " ");
+        if (left > 0) return "До «" + g.name + "» осталось " + formatRub(left).replace(/\u00a0/g, " ");
+      }
+    }
+
+    if (expense > 0 && exps.length) {
+      const byCat = {};
+      exps.forEach((e) => {
+        const id = e.category || "other";
+        byCat[id] = (byCat[id] || 0) + (Number(e.amount) || 0);
+      });
+      let topId = null;
+      let topVal = 0;
+      Object.keys(byCat).forEach((id) => {
+        if (byCat[id] > topVal) {
+          topVal = byCat[id];
+          topId = id;
+        }
+      });
+      if (topId && expense > 0) {
+        const pct = Math.round((topVal / expense) * 100);
+        const catAcc = {
+          food: "еду",
+          transport: "транспорт",
+          housing: "жильё",
+          comms: "связь",
+          health: "здоровье",
+          fun: "развлечения",
+          other: "другое",
+        };
+        const label = catAcc[topId] || categoryById(topId).name.toLowerCase();
+        if (pct >= 25) return "На " + label + " ушло " + pct + "% расходов";
+      }
+    }
+
+    if (income > 0 && expense > 0) {
+      const pct = Math.round((expense / income) * 100);
+      if (pct <= 70) return "Потрачено " + pct + "% доходов — хороший темп";
+      if (pct <= 100) return "Потрачено " + pct + "% доходов за месяц";
+      return "Расходы выше доходов на " + formatRub(expense - income).replace(/\u00a0/g, " ");
+    }
+
+    if (income > 0 && expense === 0) return "Доходы есть — отметьте первый расход";
+    if (eng.streak >= 3) return "Серия " + eng.streak + " дн. — вы в ритме 🔥";
+    if (balance > 0) return "В плюсе на " + formatRub(balance).replace(/\u00a0/g, " ");
+    return "Маленький шаг сегодня — привычка завтра";
+  }
+
+  function renderInsight() {
+    if (!elInsight) return;
+    elInsight.textContent = buildInsight();
+  }
+
+  function renderDemoBanner() {
+    if (!elDemoBanner) return;
+    const eng = ensureEngagement();
+    const hasDemo =
+      state.incomes.some((i) => i.demo) ||
+      state.expenses.some((e) => e.demo) ||
+      state.goals.some((g) => g.demo);
+    if (eng.demoActive && !hasDemo) eng.demoActive = false;
+    elDemoBanner.hidden = !eng.demoActive;
+  }
+
   function renderBalance() {
     const { income, expense, balance } = getTotals();
     elBalance.textContent = formatRub(balance);
@@ -339,6 +565,10 @@
     else elBalance.classList.add("zero");
     elIncomeTotal.textContent = formatRub(income);
     elExpenseTotal.textContent = formatRub(expense);
+    renderSpendToday();
+    renderInsight();
+    renderStreak();
+    renderDemoBanner();
   }
 
   function opRowHtml(item, type) {
@@ -372,12 +602,12 @@
 
   function emptyOpsHtml(filter) {
     if (filter === "income") {
-      return `<div class="empty-hint"><span class="empty-hint__emoji">💰</span>Пока нет доходов за этот месяц.<br>Нажмите «+ Доход» на главной.</div>`;
+      return `<div class="empty-hint"><span class="empty-hint__emoji">💰</span>Доходов ещё нет — и это нормально.<br>Нажмите «+ Доход», когда появятся.</div>`;
     }
     if (filter === "expense") {
-      return `<div class="empty-hint"><span class="empty-hint__emoji">🧾</span>Расходов пока нет.<br>Добавьте покупку или платёж.</div>`;
+      return `<div class="empty-hint"><span class="empty-hint__emoji">🧾</span>Расходов пока нет.<br>Тапните чип «Кофе» на главной — и список оживёт.</div>`;
     }
-    return `<div class="empty-hint"><span class="empty-hint__emoji">✨</span>Пока тихо — операций нет.<br>Добавьте первый доход или расход.</div>`;
+    return `<div class="empty-hint"><span class="empty-hint__emoji">✨</span>Здесь будет ваш день.<br>Добавьте первую операцию — займёт 5 секунд.</div>`;
   }
 
   function renderOpsList(container, limit, filter) {
@@ -415,7 +645,7 @@
 
     const withLimit = CATEGORIES.filter((c) => Number(state.budgets[c.id]) > 0);
     if (!withLimit.length) {
-      container.innerHTML = `<div class="empty-hint"><span class="empty-hint__emoji">📊</span>Лимиты ещё не заданы.<br>Настройте бюджет по категориям — и увидите прогресс.</div>`;
+      container.innerHTML = `<div class="empty-hint"><span class="empty-hint__emoji">📊</span>Лимиты ещё не заданы — без стресса.<br>Настройте пару категорий, когда будете готовы.</div>`;
       return;
     }
 
@@ -442,7 +672,7 @@
   }
 
   function goalRingSvg(pct) {
-    const r = 28;
+    const r = 30;
     const c = 2 * Math.PI * r;
     const offset = c - (Math.min(pct, 100) / 100) * c;
     const stroke = pct >= 100 ? "var(--income)" : "var(--accent)";
@@ -505,7 +735,7 @@
   function renderGoal() {
     // Главная: первая цель
     if (!state.goals.length) {
-      elHomeGoal.innerHTML = `<div class="empty-hint"><span class="empty-hint__emoji">🎯</span>Цели пока нет.<br>Задайте, на что копите — телефон, отпуск или подушку.</div>`;
+      elHomeGoal.innerHTML = `<div class="empty-hint"><span class="empty-hint__emoji">🎯</span>Цели пока нет — выберите мечту.<br>Отпуск, подушка или новый телефон.</div>`;
     } else {
       elHomeGoal.innerHTML = renderGoalCard(state.goals[0], true);
     }
@@ -521,7 +751,7 @@
     } else {
       let html = "";
       if (!state.goals.length) {
-        html = `<div class="empty-hint" style="margin-bottom:14px"><span class="empty-hint__emoji">🎯</span>Создайте цель накоплений — и следите за прогрессом.</div>`;
+        html = `<div class="empty-hint" style="margin-bottom:14px"><span class="empty-hint__emoji">🎯</span>Создайте цель — кольцо прогресса появится сразу.<br>Маленькие шаги складываются в «Красота!».</div>`;
       } else {
         html = state.goals.map((g) => renderGoalCard(g, false)).join("");
       }
@@ -605,6 +835,201 @@
     const show = adsOn();
     if (elAdBanner) elAdBanner.hidden = !show;
     document.body.classList.toggle("has-ad-banner", show);
+  }
+
+  /* ——— Celebrations ——— */
+  function runConfetti(durationMs) {
+    const canvas = elConfetti;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const colors = ["#34d399", "#2dd4bf", "#a78bfa", "#fbbf24", "#fb7185", "#60a5fa"];
+    const parts = [];
+    for (let i = 0; i < 64; i++) {
+      parts.push({
+        x: Math.random() * w,
+        y: -20 - Math.random() * h * 0.3,
+        r: 3 + Math.random() * 5,
+        c: colors[(Math.random() * colors.length) | 0],
+        vx: -2 + Math.random() * 4,
+        vy: 2 + Math.random() * 4,
+        rot: Math.random() * Math.PI,
+        vr: -0.2 + Math.random() * 0.4,
+      });
+    }
+
+    const t0 = Date.now();
+    function frame() {
+      const elapsed = Date.now() - t0;
+      ctx.clearRect(0, 0, w, h);
+      parts.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.06;
+        p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.r, -p.r * 0.4, p.r * 2, p.r * 0.8);
+        ctx.restore();
+      });
+      if (elapsed < (durationMs || 1600)) requestAnimationFrame(frame);
+      else ctx.clearRect(0, 0, w, h);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function celebrate(title, text, emoji) {
+    if (!elCelebrate) {
+      toast(title + (text ? " — " + text : ""));
+      return;
+    }
+    $("#celebrate-emoji").textContent = emoji || "🎉";
+    $("#celebrate-title").textContent = title || "Красота!";
+    $("#celebrate-text").textContent = text || "";
+    elCelebrate.hidden = false;
+    runConfetti(1800);
+    clearTimeout(celebrate._t);
+    celebrate._t = setTimeout(() => {
+      elCelebrate.hidden = true;
+    }, 2000);
+  }
+
+  function checkGoalMilestones(goal, prevPct) {
+    if (!goal || !goal.id) return;
+    const eng = ensureEngagement();
+    if (!eng.milestones[goal.id]) eng.milestones[goal.id] = [];
+    const hit = eng.milestones[goal.id];
+    const t = Number(goal.target) || 0;
+    const s = Number(goal.saved) || 0;
+    const pct = t > 0 ? Math.min(100, (s / t) * 100) : 0;
+
+    GOAL_MILESTONES.forEach((m) => {
+      if (pct >= m && prevPct < m && hit.indexOf(m) === -1) {
+        hit.push(m);
+        const label =
+          m === 100
+            ? "Цель достигнута!"
+            : m + "% пути к «" + goal.name + "»";
+        celebrate("Красота!", label, m === 100 ? "🏆" : m >= 50 ? "✨" : "🌱");
+        // pulse card on next render
+        setTimeout(() => {
+          const card = document.querySelector('.goal-item[data-goal-id="' + goal.id + '"]');
+          if (card) {
+            card.classList.add("is-milestone");
+            setTimeout(() => card.classList.remove("is-milestone"), 900);
+          }
+        }, 50);
+      }
+    });
+  }
+
+  function maybeFirstOpCelebrate() {
+    const eng = ensureEngagement();
+    if (eng.firstOpCelebrated) return;
+    const total = state.incomes.length + state.expenses.length;
+    if (total >= 1) {
+      eng.firstOpCelebrated = true;
+      celebrate("Первый шаг!", "Операция записана — так держать", "🚀");
+    }
+  }
+
+  function quickAddExpense(name, amount, category) {
+    if (!canAddOperation()) {
+      toast("Лимит операций на сегодня. Посмотрите рекламу или уберите рекламу");
+      openRewardSheet();
+      return;
+    }
+    const entry = {
+      id: uid(),
+      name: name,
+      amount: Number(amount),
+      category: category || "other",
+      month: currentMonth,
+      createdAt: Date.now(),
+    };
+    state.expenses.unshift(entry);
+    touchStreak(false);
+    maybeFirstOpCelebrate();
+    persistAndRender();
+    toast("− " + name + " " + formatRub(amount));
+  }
+
+  function fillDemoData() {
+    const month = currentMonth;
+    const eng = ensureEngagement();
+    // очистить прошлый демо-слой
+    state.incomes = state.incomes.filter((i) => !i.demo);
+    state.expenses = state.expenses.filter((e) => !e.demo);
+    state.goals = state.goals.filter((g) => !g.demo);
+
+    const mk = (partial) => ({ id: uid(), month, createdAt: Date.now() - Math.random() * 1e7, demo: true, ...partial });
+
+    state.incomes.unshift(
+      mk({ name: "Зарплата", amount: 75000 }),
+      mk({ name: "Подработка", amount: 8000 })
+    );
+    state.expenses.unshift(
+      mk({ name: "Продукты", amount: 9200, category: "food" }),
+      mk({ name: "Метро", amount: 2100, category: "transport" }),
+      mk({ name: "Аренда", amount: 28000, category: "housing" }),
+      mk({ name: "Связь", amount: 650, category: "comms" }),
+      mk({ name: "Аптека", amount: 890, category: "health" }),
+      mk({ name: "Кино", amount: 1200, category: "fun" }),
+      mk({ name: "Кофе", amount: 450, category: "food" })
+    );
+
+    if (!state.goals.length) {
+      state.goals.push({
+        id: uid(),
+        name: "Отпуск",
+        target: 80000,
+        saved: 18500,
+        demo: true,
+      });
+    }
+
+    if (!Object.keys(state.budgets).length) {
+      state.budgets = { food: 15000, transport: 4000, fun: 5000 };
+    }
+
+    eng.demoActive = true;
+    touchStreak(false);
+    persistAndRender();
+    toast("Пример заполнен — баланс живой");
+  }
+
+  function clearDemoData() {
+    const eng = ensureEngagement();
+    state.incomes = state.incomes.filter((i) => !i.demo);
+    state.expenses = state.expenses.filter((e) => !e.demo);
+    state.goals = state.goals.filter((g) => !g.demo);
+    eng.demoActive = false;
+    persistAndRender();
+    toast("Пример убран");
+  }
+
+  function applyGoalTemplate(name, target) {
+    if (!canAddGoal()) {
+      toast("Лимит целей. Посмотрите рекламу, чтобы открыть 2-ю");
+      openRewardSheet();
+      return false;
+    }
+    const goal = { id: uid(), name: name, target: Number(target), saved: 0 };
+    state.goals.push(goal);
+    touchStreak(false);
+    persistAndRender();
+    toast("Цель «" + name + "» создана");
+    return true;
   }
 
   function persistAndRender() {
@@ -841,6 +1266,8 @@
       toast("Расход добавлен");
     }
     closeModal($("#modal-op"));
+    touchStreak(false);
+    maybeFirstOpCelebrate();
     persistAndRender();
   }
 
@@ -862,9 +1289,12 @@
     if (editingGoalId) {
       const g = state.goals.find((x) => x.id === editingGoalId);
       if (g) {
+        const prevT = Number(g.target) || 0;
+        const prevPct = prevT > 0 ? Math.min(100, ((Number(g.saved) || 0) / prevT) * 100) : 0;
         g.name = name;
         g.target = target;
         g.saved = saved;
+        checkGoalMilestones(g, prevPct);
       }
       editingGoalId = null;
       toast("Цель сохранена");
@@ -874,12 +1304,15 @@
         openRewardSheet();
         return;
       }
-      state.goals.push({ id: uid(), name, target, saved });
+      const g = { id: uid(), name, target, saved };
+      state.goals.push(g);
+      checkGoalMilestones(g, 0);
       toast("Цель сохранена");
     }
 
     form.reset();
     form.goalSaved.value = "0";
+    touchStreak(false);
     persistAndRender();
   }
 
@@ -893,10 +1326,14 @@
       toast("Введите положительную сумму");
       return;
     }
+    const t = Number(g.target) || 0;
+    const prevPct = t > 0 ? Math.min(100, ((Number(g.saved) || 0) / t) * 100) : 0;
     g.saved = (Number(g.saved) || 0) + add;
     closeModal($("#modal-goal-add"));
+    touchStreak(false);
+    checkGoalMilestones(g, prevPct);
     persistAndRender();
-    toast("Накопления обновлены");
+    toast("Накопления обновлены · +" + formatRub(add));
   }
 
   function onGoalEdit(goalId) {
@@ -989,6 +1426,13 @@
   function dismissOnboarding() {
     localStorage.setItem(ONBOARD_KEY, "1");
     elOnboarding.hidden = true;
+  }
+
+  function showOnboardStep(n) {
+    const s1 = $("#onboard-step-1");
+    const s2 = $("#onboard-step-2");
+    if (s1) s1.hidden = n !== 1;
+    if (s2) s2.hidden = n !== 2;
   }
 
   function bind() {
@@ -1096,8 +1540,57 @@
     $("#btn-cancel-reset").addEventListener("click", () => closeModal($("#reset-modal")));
     $("#btn-confirm-reset").addEventListener("click", confirmReset);
 
-    $("#btn-onboarding-done").addEventListener("click", dismissOnboarding);
-    $("#btn-onboarding-skip").addEventListener("click", dismissOnboarding);
+    const btnOnboardDone = $("#btn-onboarding-done");
+    const btnOnboardSkip = $("#btn-onboarding-skip");
+    const btnOnboardNext = $("#btn-onboard-next");
+    const btnOnboardExpense = $("#btn-onboard-expense");
+    const btnFillDemo = $("#btn-fill-demo");
+    const btnClearDemo = $("#btn-clear-demo");
+
+    if (btnOnboardDone) btnOnboardDone.addEventListener("click", dismissOnboarding);
+    if (btnOnboardSkip) btnOnboardSkip.addEventListener("click", dismissOnboarding);
+    if (btnOnboardNext) {
+      btnOnboardNext.addEventListener("click", () => showOnboardStep(2));
+    }
+    if (btnOnboardExpense) {
+      btnOnboardExpense.addEventListener("click", () => {
+        dismissOnboarding();
+        openOpModal("expense");
+      });
+    }
+    if (btnFillDemo) {
+      btnFillDemo.addEventListener("click", () => {
+        fillDemoData();
+        dismissOnboarding();
+      });
+    }
+    if (btnClearDemo) {
+      btnClearDemo.addEventListener("click", clearDemoData);
+    }
+
+    $$("[data-goal-template]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const ok = applyGoalTemplate(btn.dataset.name, btn.dataset.target);
+        if (ok) {
+          dismissOnboarding();
+          switchScreen("goals");
+          celebrate("Цель задана!", "«" + btn.dataset.name + "» — можно откладывать", "🎯");
+        }
+      });
+    });
+
+    $$(".chip-quick").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        btn.classList.remove("is-pop");
+        void btn.offsetWidth;
+        btn.classList.add("is-pop");
+        quickAddExpense(
+          btn.dataset.quickName,
+          btn.dataset.quickAmount,
+          btn.dataset.quickCat
+        );
+      });
+    });
 
     const btnConfirmPro = $("#btn-confirm-pro");
     if (btnConfirmPro) btnConfirmPro.addEventListener("click", confirmProPurchase);
@@ -1121,11 +1614,14 @@
 
   /* ——— Init ——— */
   resetDailyRewardIfNeeded();
+  ensureEngagement();
   fillCategories();
   bind();
+  touchStreak(true);
   persistAndRender();
 
   if (!localStorage.getItem(ONBOARD_KEY)) {
+    showOnboardStep(1);
     elOnboarding.hidden = false;
   }
 

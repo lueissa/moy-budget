@@ -16,24 +16,38 @@
 </head>
 <body>
   <div class="app" id="app">
-    <!-- Онбординг -->
+    <!-- Онбординг: вау за 30 секунд -->
     <div class="onboarding" id="onboarding" hidden>
       <div class="onboarding__card">
-        <div class="onboarding__icon" aria-hidden="true">
-          <img src="icon.svg" width="72" height="72" alt="" />
+        <div class="onboarding-step" id="onboard-step-1">
+          <div class="onboarding__icon" aria-hidden="true">
+            <img src="icon.svg" width="72" height="72" alt="" />
+          </div>
+          <h1 class="onboarding__title">Бюджет,<br>который хочется открывать</h1>
+          <p class="onboarding__text">
+            За 30 секунд увидите, сколько ещё можно потратить сегодня —
+            и первую цель. Данные только на устройстве.
+          </p>
+          <ul class="onboarding__list">
+            <li>Баланс и дневной лимит крупно</li>
+            <li>Инсайт дня одной строкой</li>
+            <li>Серия дней 🔥 — мягко, без стыда</li>
+          </ul>
+          <button type="button" class="btn primary block" id="btn-onboard-next">Дальше · 15 сек</button>
+          <button type="button" class="link-btn onboarding__skip" id="btn-onboarding-skip">Пропустить</button>
         </div>
-        <h1 class="onboarding__title">Добро пожаловать<br>в «Мой бюджет»</h1>
-        <p class="onboarding__text">
-          Считайте доходы и расходы, следите за лимитами и копите на цель.
-          Всё хранится только на этом устройстве — без аккаунта и облака.
-        </p>
-        <ul class="onboarding__list">
-          <li>Баланс месяца крупно на главном экране</li>
-          <li>Быстрые кнопки «+ Доход» и «+ Расход»</li>
-          <li>Цель накоплений с прогрессом</li>
-        </ul>
-        <button type="button" class="btn primary block" id="btn-onboarding-done">Начать</button>
-        <button type="button" class="link-btn onboarding__skip" id="btn-onboarding-skip">Пропустить</button>
+        <div class="onboarding-step" id="onboard-step-2" hidden>
+          <h1 class="onboarding__title">Первый шаг</h1>
+          <p class="onboarding__text">Выберите цель-шаблон или сразу добавьте расход. Либо заполните пример — и баланс оживёт.</p>
+          <div class="goal-templates" id="goal-templates">
+            <button type="button" class="template-chip" data-goal-template="vacation" data-name="Отпуск" data-target="80000">✈️ Отпуск · 80 000 ₽</button>
+            <button type="button" class="template-chip" data-goal-template="cushion" data-name="Подушка" data-target="100000">🛡️ Подушка · 100 000 ₽</button>
+            <button type="button" class="template-chip" data-goal-template="phone" data-name="Телефон" data-target="50000">📱 Телефон · 50 000 ₽</button>
+          </div>
+          <button type="button" class="btn primary block" id="btn-onboard-expense" style="margin-top:14px">− Добавить первый расход</button>
+          <button type="button" class="btn secondary block" id="btn-fill-demo" style="margin-top:8px">✨ Заполнить пример</button>
+          <button type="button" class="link-btn onboarding__skip" id="btn-onboarding-done">На главную</button>
+        </div>
       </div>
     </div>
 
@@ -56,9 +70,26 @@
     <main class="main">
       <!-- Главная -->
       <section class="screen active" id="screen-home" data-screen="home" aria-label="Главная">
-        <div class="balance-card glass">
-          <div class="balance-label">Баланс месяца</div>
+        <div class="demo-banner" id="demo-banner" hidden>
+          <span>Это пример — баланс уже живой</span>
+          <button type="button" class="demo-banner__btn" id="btn-clear-demo">Убрать</button>
+        </div>
+
+        <div class="balance-card glass reveal">
+          <div class="balance-card__top">
+            <div class="balance-label">Баланс месяца</div>
+            <div class="streak-badge" id="streak-badge" hidden title="Серия дней">
+              <span aria-hidden="true">🔥</span>
+              <span id="streak-count">0</span>
+              <span class="streak-badge__label">дн.</span>
+            </div>
+          </div>
           <div class="balance-value zero" id="balance-value">0 ₽</div>
+          <div class="spend-today" id="spend-today">
+            <span class="spend-today__label">Ещё можно потратить сегодня</span>
+            <span class="spend-today__value" id="spend-today-value">—</span>
+          </div>
+          <div class="insight-line" id="insight-line" role="status">Откройте день — добавьте первую операцию</div>
           <div class="balance-row">
             <div class="balance-item income">
               <span class="balance-item-label">Доходы</span>
@@ -71,6 +102,12 @@
           </div>
         </div>
 
+        <div class="quick-chips" id="quick-chips" aria-label="Быстрые расходы">
+          <button type="button" class="chip-quick" data-quick-name="Кофе" data-quick-amount="150" data-quick-cat="food">☕ Кофе 150₽</button>
+          <button type="button" class="chip-quick" data-quick-name="Транспорт" data-quick-amount="50" data-quick-cat="transport">🚌 Транспорт 50₽</button>
+          <button type="button" class="chip-quick" data-quick-name="Продукты" data-quick-amount="500" data-quick-cat="food">🛒 Продукты 500₽</button>
+        </div>
+
         <div class="quick-actions">
           <button type="button" class="quick-btn expense" id="btn-quick-expense">
             <span class="quick-icon">−</span> Расход
@@ -80,7 +117,7 @@
           </button>
         </div>
 
-        <div class="section-block" id="home-goal-block">
+        <div class="section-block reveal" id="home-goal-block">
           <div class="section-head">
             <h2>Цель</h2>
             <button type="button" class="link-btn" data-nav="goals">Все цели</button>
@@ -88,7 +125,7 @@
           <div id="home-goal-preview"></div>
         </div>
 
-        <div class="section-block" id="home-budget-block">
+        <div class="section-block reveal" id="home-budget-block">
           <div class="section-head">
             <h2>Лимиты месяца</h2>
             <button type="button" class="link-btn" id="btn-edit-budgets">Настроить</button>
@@ -96,7 +133,7 @@
           <div class="budget-preview" id="home-budget-preview"></div>
         </div>
 
-        <div class="section-block">
+        <div class="section-block reveal">
           <div class="section-head">
             <h2>Недавние операции</h2>
             <button type="button" class="link-btn" data-nav="ops">Все</button>
@@ -377,6 +414,16 @@
         <button type="button" class="btn secondary" data-close-modal>Отмена</button>
         <button type="button" class="btn primary" id="btn-confirm-pro">Купить (демо)</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Праздник / confetti -->
+  <div class="celebrate" id="celebrate" hidden>
+    <canvas class="celebrate__canvas" id="confetti-canvas" aria-hidden="true"></canvas>
+    <div class="celebrate__card" id="celebrate-card">
+      <div class="celebrate__emoji" id="celebrate-emoji">🎉</div>
+      <div class="celebrate__title" id="celebrate-title">Красота!</div>
+      <div class="celebrate__text" id="celebrate-text"></div>
     </div>
   </div>
 
