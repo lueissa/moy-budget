@@ -187,6 +187,23 @@
           </div>
         </div>
 
+
+        <div class="section-block" id="support-block">
+          <div class="section-head"><h2>Поддержка</h2></div>
+          <div class="settings-card glass support-card" id="support-card">
+            <div class="plan-badge" id="plan-badge">Бесплатно с рекламой</div>
+            <p class="muted small" id="plan-desc">
+              Приложение бесплатное. Короткая реклама помогает его развивать.
+              Не хотите рекламу — можно отключить навсегда.
+            </p>
+            <div class="support-actions" id="support-actions">
+              <button type="button" class="btn secondary block" id="btn-watch-ad">Смотреть рекламу</button>
+              <button type="button" class="btn primary block" id="btn-remove-ads">Убрать рекламу</button>
+            </div>
+            <p class="muted small" id="reward-status" style="margin-top:10px"></p>
+          </div>
+        </div>
+
         <div class="section-block">
           <div class="section-head"><h2>Данные</h2></div>
           <div class="settings-card glass">
@@ -200,6 +217,13 @@
         </div>
       </section>
     </main>
+
+
+    <!-- Баннер-заглушка рекламы (только free) -->
+    <div class="ad-banner" id="ad-banner" hidden>
+      <span class="ad-banner__label">Реклама</span>
+      <span class="ad-banner__note">В релизе здесь будет AdMob</span>
+    </div>
 
     <!-- Bottom tab bar -->
     <nav class="bottom-nav" role="tablist" aria-label="Основная навигация">
@@ -290,6 +314,68 @@
       <div class="modal-actions">
         <button type="button" class="btn secondary" id="btn-cancel-reset">Отмена</button>
         <button type="button" class="btn danger" id="btn-confirm-reset">Сбросить</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Overlay: имитация rewarded-рекламы -->
+  <div class="ad-overlay" id="ad-overlay" hidden>
+    <div class="ad-overlay__card">
+      <div class="ad-overlay__badge">Реклама</div>
+      <p class="ad-overlay__title" id="ad-overlay-title">Реклама…</p>
+      <p class="ad-overlay__sub muted small">Заглушка AdMob · 3–5 сек</p>
+      <div class="ad-overlay__progress"><div class="ad-overlay__bar" id="ad-overlay-bar"></div></div>
+      <p class="ad-overlay__timer muted small" id="ad-overlay-timer">5</p>
+    </div>
+  </div>
+
+  <!-- Sheet: выбор награды -->
+  <div class="modal" id="modal-reward" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-reward-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <h2 id="modal-reward-title">Награда за просмотр</h2>
+      <p class="muted small" style="margin-bottom:14px">Посмотрите короткую рекламу и выберите бонус.</p>
+      <button type="button" class="reward-option" id="btn-reward-extra-goal" data-reward="extraGoals">
+        <span class="reward-option__icon">🎯</span>
+        <span class="reward-option__body">
+          <strong>Открыть 2-ю цель</strong>
+          <span class="muted small">Ещё одна цель накоплений</span>
+        </span>
+      </button>
+      <button type="button" class="reward-option" id="btn-reward-ops-limit" data-reward="removeDailyLimit">
+        <span class="reward-option__icon">∞</span>
+        <span class="reward-option__body">
+          <strong>Снять лимит операций</strong>
+          <span class="muted small">Без дневного лимита на сегодня</span>
+        </span>
+      </button>
+      <div class="modal-actions" style="grid-template-columns:1fr">
+        <button type="button" class="btn secondary" data-close-modal>Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet: убрать рекламу -->
+  <div class="modal" id="modal-remove-ads" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-remove-ads-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <h2 id="modal-remove-ads-title">Убрать рекламу</h2>
+      <p class="muted" style="margin-bottom:12px">
+        Версия без рекламы — все функции открыты, баннер скрыт.
+      </p>
+      <div class="price-card glass">
+        <div class="price-card__amount">149 ₽</div>
+        <div class="price-card__period">навсегда</div>
+      </div>
+      <p class="muted small" style="margin:12px 0 0">
+        В магазине оплата подключится после публикации. Сейчас — локальный флаг для проверки.
+      </p>
+      <div class="modal-actions">
+        <button type="button" class="btn secondary" data-close-modal>Отмена</button>
+        <button type="button" class="btn primary" id="btn-confirm-pro">Купить (демо)</button>
       </div>
     </div>
   </div>

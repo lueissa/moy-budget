@@ -1,6 +1,11 @@
 /**
  * Мой бюджет — персональный финансовый калькулятор
  * Данные в localStorage. Работает офлайн.
+ *
+ * Freemium: free = с рекламой-заглушкой; pro = без рекламы.
+ * // AdMob Rewarded: подключить через Capacitor @capacitor-community/admob после сборки Android
+ * // AdMob Banner: подключить через Capacitor @capacitor-community/admob после сборки Android
+ * // In-App Purchase «Убрать рекламу»: подключить через Capacitor после публикации в RuStore/Play
  */
 (function () {
   "use strict";
@@ -8,6 +13,12 @@
   const STORAGE_KEY = "moy-budget-v2";
   const LEGACY_KEY = "liza-finance-v1";
   const ONBOARD_KEY = "moy-budget-onboarded";
+
+  const FREE_DAILY_OPS_LIMIT = 15;
+  const MAX_REWARDS_PER_DAY = 5;
+  const FREE_MAX_GOALS = 1;
+  const FREE_MAX_GOALS_UNLOCKED = 2;
+  const PRO_MAX_GOALS = 10;
 
   const CATEGORIES = [
     { id: "food", name: "Еда", icon: "🍽️" },
@@ -53,6 +64,14 @@
     return y + "-" + m;
   }
 
+  function todayKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
   function parseMonthKey(key) {
     const [y, m] = key.split("-").map(Number);
     return new Date(y, m - 1, 1);
@@ -64,12 +83,58 @@
     return monthKey(d);
   }
 
+  function defaultMonetization() {
+    return {
+      plan: "free",
+      adsEnabled: true,
+      dailyRewardedCount: 0,
+      lastRewardDate: null,
+      unlocks: {
+        extraGoals: false,
+        removeDailyLimit: false,
+        removeDailyLimitDate: null,
+      },
+    };
+  }
+
+  function normalizeGoal(g) {
+    if (!g || typeof g !== "object") return null;
+    return {
+      id: g.id || uid(),
+      name: g.name || "Цель",
+      target: Number(g.target) || 0,
+      saved: Number(g.saved) || 0,
+    };
+  }
+
+  function normalizeGoals(parsed) {
+    if (Array.isArray(parsed.goals) && parsed.goals.length) {
+      return parsed.goals.map(normalizeGoal).filter(Boolean);
+    }
+    if (parsed.goal && typeof parsed.goal === "object") {
+      const g = normalizeGoal(parsed.goal);
+      return g ? [g] : [];
+    }
+    return [];
+  }
+
+  function normalizeUnlocks(u) {
+    const base = defaultMonetization().unlocks;
+    if (!u || typeof u !== "object") return base;
+    return {
+      extraGoals: !!u.extraGoals,
+      removeDailyLimit: !!u.removeDailyLimit,
+      removeDailyLimitDate: u.removeDailyLimitDate || null,
+    };
+  }
+
   function defaultState() {
     return {
       incomes: [],
       expenses: [],
-      goal: null,
+      goals: [],
       budgets: {},
+      ...defaultMonetization(),
     };
   }
 
@@ -90,11 +155,23 @@
       month: e.month || now,
       createdAt: e.createdAt || Date.now(),
     }));
+
+    const mon = defaultMonetization();
+    const plan = parsed.plan === "pro" ? "pro" : "free";
+    const unlocks = normalizeUnlocks(parsed.unlocks);
+
+    // Мягкая миграция: существующие пользователи без plan → free с рекламой,
+    // их текущая цель сохраняется в goals[]
     return {
       incomes,
       expenses,
-      goal: parsed.goal && typeof parsed.goal === "object" ? parsed.goal : null,
+      goals: normalizeGoals(parsed),
       budgets: parsed.budgets && typeof parsed.budgets === "object" ? parsed.budgets : {},
+      plan,
+      adsEnabled: plan === "pro" ? false : parsed.adsEnabled !== false,
+      dailyRewardedCount: Number(parsed.dailyRewardedCount) || 0,
+      lastRewardDate: parsed.lastRewardDate || null,
+      unlocks,
     };
   }
 
@@ -117,13 +194,19 @@
   }
 
   function saveState(state) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // Не пишем устаревшее поле goal — только goals[]
+    const toSave = { ...state };
+    delete toSave.goal;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }
 
   let state = loadState();
   let currentMonth = monthKey(new Date());
   let opsFilter = "all";
-  let editingGoal = false;
+  let editingGoalId = null;
+  let activeGoalId = null;
+  let pendingReward = null;
+  let adPlaying = false;
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
@@ -141,6 +224,12 @@
   const elToast = $("#toast");
   const elOnboarding = $("#onboarding");
   const categorySelect = $("#op-category");
+  const elAdBanner = $("#ad-banner");
+  const elAdOverlay = $("#ad-overlay");
+  const elPlanBadge = $("#plan-badge");
+  const elPlanDesc = $("#plan-desc");
+  const elRewardStatus = $("#reward-status");
+  const elSupportActions = $("#support-actions");
 
   function escapeHtml(str) {
     return String(str)
@@ -163,6 +252,66 @@
     return CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
   }
 
+  /* ——— Freemium helpers ——— */
+  function isPro() {
+    return state.plan === "pro";
+  }
+
+  function adsOn() {
+    return !isPro() && state.adsEnabled !== false;
+  }
+
+  function maxGoalsAllowed() {
+    if (isPro()) return PRO_MAX_GOALS;
+    if (state.unlocks && state.unlocks.extraGoals) return FREE_MAX_GOALS_UNLOCKED;
+    return FREE_MAX_GOALS;
+  }
+
+  function canAddGoal() {
+    return state.goals.length < maxGoalsAllowed();
+  }
+
+  function resetDailyRewardIfNeeded() {
+    const today = todayKey();
+    if (state.lastRewardDate !== today) {
+      state.dailyRewardedCount = 0;
+      state.lastRewardDate = today;
+      // дневной unlock лимита сбрасывается на новый день
+      if (state.unlocks.removeDailyLimitDate && state.unlocks.removeDailyLimitDate !== today) {
+        state.unlocks.removeDailyLimit = false;
+        state.unlocks.removeDailyLimitDate = null;
+      }
+    }
+  }
+
+  function rewardsLeftToday() {
+    resetDailyRewardIfNeeded();
+    return Math.max(0, MAX_REWARDS_PER_DAY - (state.dailyRewardedCount || 0));
+  }
+
+  function hasDailyOpsLimit() {
+    if (isPro()) return false;
+    resetDailyRewardIfNeeded();
+    if (state.unlocks.removeDailyLimit && state.unlocks.removeDailyLimitDate === todayKey()) {
+      return false;
+    }
+    return true;
+  }
+
+  function todayOpsCount() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const t0 = start.getTime();
+    const countIn = (arr) =>
+      arr.filter((x) => (Number(x.createdAt) || 0) >= t0).length;
+    return countIn(state.incomes) + countIn(state.expenses);
+  }
+
+  function canAddOperation() {
+    if (!hasDailyOpsLimit()) return true;
+    return todayOpsCount() < FREE_DAILY_OPS_LIMIT;
+  }
+
   function monthIncomes() {
     return state.incomes.filter((i) => i.month === currentMonth);
   }
@@ -179,7 +328,6 @@
 
   function renderMonthLabel() {
     elMonthLabel.textContent = monthFmt.format(parseMonthKey(currentMonth));
-    // навигация по месяцам без ограничений — можно смотреть будущее/прошлое
   }
 
   function renderBalance() {
@@ -308,15 +456,8 @@
       </svg>`;
   }
 
-  function renderGoalCard(compact) {
-    if (!state.goal) {
-      if (compact) {
-        return `<div class="empty-hint"><span class="empty-hint__emoji">🎯</span>Цели пока нет.<br>Задайте, на что копите — телефон, отпуск или подушку.</div>`;
-      }
-      return "";
-    }
-
-    const { name, target, saved } = state.goal;
+  function renderGoalCard(goal, compact) {
+    const { name, target, saved, id } = goal;
     const t = Math.max(Number(target) || 0, 0);
     const s = Math.max(Number(saved) || 0, 0);
     const pct = t > 0 ? Math.min(100, Math.round((s / t) * 1000) / 10) : 0;
@@ -325,17 +466,17 @@
 
     const actions = compact
       ? `<div class="goal-actions">
-           <button type="button" class="btn secondary" data-action="goal-add">+ Отложить</button>
+           <button type="button" class="btn secondary" data-action="goal-add" data-goal-id="${id}">+ Отложить</button>
            <button type="button" class="btn secondary" data-nav="goals">Открыть</button>
          </div>`
       : `<div class="goal-actions">
-           <button type="button" class="btn primary" data-action="goal-add">+ Отложить</button>
-           <button type="button" class="btn secondary" data-action="goal-edit">Изменить</button>
+           <button type="button" class="btn primary" data-action="goal-add" data-goal-id="${id}">+ Отложить</button>
+           <button type="button" class="btn secondary" data-action="goal-edit" data-goal-id="${id}">Изменить</button>
          </div>
-         <button type="button" class="btn danger block" data-action="goal-clear" style="margin-top:10px">Удалить цель</button>`;
+         <button type="button" class="btn danger block" data-action="goal-clear" data-goal-id="${id}" style="margin-top:10px">Удалить цель</button>`;
 
     return `
-      <div class="goal-item">
+      <div class="goal-item" data-goal-id="${id}">
         <div class="goal-item-top">
           <div>
             <div class="goal-name">${escapeHtml(name)}</div>
@@ -362,20 +503,108 @@
   }
 
   function renderGoal() {
-    elHomeGoal.innerHTML = renderGoalCard(true);
-
-    if (!state.goal || editingGoal) {
-      elGoalView.innerHTML = state.goal && editingGoal ? "" : `<div class="empty-hint" style="margin-bottom:14px"><span class="empty-hint__emoji">🎯</span>Создайте цель накоплений — и следите за прогрессом.</div>`;
-      if (!state.goal || editingGoal) {
-        elGoalForm.hidden = false;
-        $("#goal-form-title").textContent = editingGoal ? "Изменить цель" : "Новая цель";
-        $("#btn-goal-cancel").hidden = !editingGoal;
-      }
+    // Главная: первая цель
+    if (!state.goals.length) {
+      elHomeGoal.innerHTML = `<div class="empty-hint"><span class="empty-hint__emoji">🎯</span>Цели пока нет.<br>Задайте, на что копите — телефон, отпуск или подушку.</div>`;
     } else {
-      elGoalView.innerHTML = renderGoalCard(false);
-      elGoalForm.hidden = true;
-      editingGoal = false;
+      elHomeGoal.innerHTML = renderGoalCard(state.goals[0], true);
     }
+
+    // Экран целей
+    const editing = editingGoalId && state.goals.find((g) => g.id === editingGoalId);
+
+    if (editing) {
+      elGoalView.innerHTML = "";
+      elGoalForm.hidden = false;
+      $("#goal-form-title").textContent = "Изменить цель";
+      $("#btn-goal-cancel").hidden = false;
+    } else {
+      let html = "";
+      if (!state.goals.length) {
+        html = `<div class="empty-hint" style="margin-bottom:14px"><span class="empty-hint__emoji">🎯</span>Создайте цель накоплений — и следите за прогрессом.</div>`;
+      } else {
+        html = state.goals.map((g) => renderGoalCard(g, false)).join("");
+      }
+
+      if (!canAddGoal() && !isPro()) {
+        html += `<div class="goal-lock-hint">
+          Бесплатно — ${FREE_MAX_GOALS} цель. Хотите ещё одну?
+          <button type="button" id="btn-unlock-goal-inline">Смотреть рекламу</button>
+        </div>`;
+      }
+
+      elGoalView.innerHTML = html;
+
+      const showForm = canAddGoal() && !editing;
+      elGoalForm.hidden = !showForm || (state.goals.length > 0 && !canAddGoal());
+      // Показать форму, если можно добавить и (нет целей или пользователь на экране целей и canAdd)
+      if (canAddGoal()) {
+        elGoalForm.hidden = false;
+        $("#goal-form-title").textContent = state.goals.length ? "Ещё одна цель" : "Новая цель";
+        $("#btn-goal-cancel").hidden = true;
+        if (state.goals.length && !editing) {
+          // форма доступна для добавления
+        }
+      } else {
+        elGoalForm.hidden = true;
+      }
+
+      const inlineBtn = $("#btn-unlock-goal-inline");
+      if (inlineBtn) {
+        inlineBtn.addEventListener("click", () => {
+          pendingReward = "extraGoals";
+          startRewardedAd("extraGoals");
+        });
+      }
+    }
+  }
+
+  function renderSupport() {
+    if (!elPlanBadge) return;
+    resetDailyRewardIfNeeded();
+
+    if (isPro()) {
+      elPlanBadge.textContent = "Без рекламы";
+      elPlanBadge.classList.add("is-pro");
+      elPlanDesc.textContent =
+        "Спасибо за поддержку! Реклама отключена, лимиты сняты.";
+      elSupportActions.innerHTML = `
+        <button type="button" class="btn secondary block" disabled>Реклама отключена</button>
+      `;
+      elRewardStatus.textContent = "";
+    } else {
+      elPlanBadge.textContent = "Бесплатно с рекламой";
+      elPlanBadge.classList.remove("is-pro");
+      elPlanDesc.textContent =
+        "Приложение бесплатное. Короткая реклама помогает его развивать. Не хотите рекламу — можно отключить навсегда.";
+      elSupportActions.innerHTML = `
+        <button type="button" class="btn secondary block" id="btn-watch-ad">Смотреть рекламу</button>
+        <button type="button" class="btn primary block" id="btn-remove-ads">Убрать рекламу</button>
+      `;
+      const left = rewardsLeftToday();
+      const opsLeft = hasDailyOpsLimit()
+        ? Math.max(0, FREE_DAILY_OPS_LIMIT - todayOpsCount())
+        : null;
+      let status = `Наград сегодня: ${left} из ${MAX_REWARDS_PER_DAY}.`;
+      if (opsLeft !== null) {
+        status += ` Операций сегодня: ${todayOpsCount()} / ${FREE_DAILY_OPS_LIMIT}.`;
+      } else {
+        status += " Лимит операций снят на сегодня.";
+      }
+      if (state.unlocks.extraGoals) {
+        status += " 2-я цель открыта.";
+      }
+      elRewardStatus.textContent = status;
+
+      $("#btn-watch-ad").addEventListener("click", openRewardSheet);
+      $("#btn-remove-ads").addEventListener("click", () => openModal("modal-remove-ads"));
+    }
+  }
+
+  function renderAdBanner() {
+    const show = adsOn();
+    if (elAdBanner) elAdBanner.hidden = !show;
+    document.body.classList.toggle("has-ad-banner", show);
   }
 
   function persistAndRender() {
@@ -386,6 +615,8 @@
     renderOpsList(elOpsList, null, opsFilter);
     renderBudgets(elHomeBudget);
     renderGoal();
+    renderSupport();
+    renderAdBanner();
   }
 
   /* ——— Navigation ——— */
@@ -400,8 +631,12 @@
       n.classList.toggle("active", on);
       n.setAttribute("aria-selected", on ? "true" : "false");
     });
-    if (id === "goals" && !state.goal) {
-      elGoalForm.hidden = false;
+    if (id === "goals") {
+      editingGoalId = null;
+      renderGoal();
+    }
+    if (id === "more") {
+      renderSupport();
     }
   }
 
@@ -422,6 +657,11 @@
   }
 
   function openOpModal(type) {
+    if (!canAddOperation()) {
+      toast("Лимит операций на сегодня. Посмотрите рекламу или уберите рекламу");
+      openRewardSheet();
+      return;
+    }
     const isIncome = type === "income";
     $("#op-type").value = type;
     $("#modal-op-title").textContent = isIncome ? "Новый доход" : "Новый расход";
@@ -454,9 +694,129 @@
     }).join("");
   }
 
+  /* ——— Rewarded ad mock ——— */
+  // AdMob Rewarded: подключить через Capacitor @capacitor-community/admob после сборки Android
+  function openRewardSheet() {
+    if (isPro()) {
+      toast("У вас уже версия без рекламы");
+      return;
+    }
+    resetDailyRewardIfNeeded();
+    if (rewardsLeftToday() <= 0) {
+      toast("На сегодня награды закончились");
+      return;
+    }
+
+    const btnGoal = $("#btn-reward-extra-goal");
+    const btnOps = $("#btn-reward-ops-limit");
+    if (btnGoal) {
+      const already = !!state.unlocks.extraGoals;
+      btnGoal.disabled = already;
+      btnGoal.querySelector("strong").textContent = already
+        ? "2-я цель уже открыта"
+        : "Открыть 2-ю цель";
+    }
+    if (btnOps) {
+      const today = todayKey();
+      const already =
+        state.unlocks.removeDailyLimit && state.unlocks.removeDailyLimitDate === today;
+      btnOps.disabled = already;
+      btnOps.querySelector("strong").textContent = already
+        ? "Лимит уже снят на сегодня"
+        : "Снять лимит операций";
+    }
+    openModal("modal-reward");
+  }
+
+  function startRewardedAd(rewardType) {
+    // AdMob Rewarded: подключить через Capacitor @capacitor-community/admob после сборки Android
+    if (adPlaying) return;
+    if (isPro()) return;
+    resetDailyRewardIfNeeded();
+    if (rewardsLeftToday() <= 0) {
+      toast("На сегодня награды закончились");
+      return;
+    }
+
+    pendingReward = rewardType;
+    closeAllModals();
+    adPlaying = true;
+
+    const duration = 3500 + Math.floor(Math.random() * 1500); // 3.5–5 сек
+    const bar = $("#ad-overlay-bar");
+    const timerEl = $("#ad-overlay-timer");
+    const titleEl = $("#ad-overlay-title");
+    if (titleEl) titleEl.textContent = "Реклама…";
+    if (bar) bar.style.width = "0%";
+    elAdOverlay.hidden = false;
+
+    const t0 = Date.now();
+    function tick() {
+      const elapsed = Date.now() - t0;
+      const pct = Math.min(100, (elapsed / duration) * 100);
+      if (bar) bar.style.width = pct + "%";
+      if (timerEl) {
+        const left = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+        timerEl.textContent = left > 0 ? String(left) : "✓";
+      }
+      if (elapsed >= duration) {
+        finishRewardedAd();
+        return;
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function finishRewardedAd() {
+    adPlaying = false;
+    elAdOverlay.hidden = true;
+    resetDailyRewardIfNeeded();
+    state.dailyRewardedCount = (state.dailyRewardedCount || 0) + 1;
+    state.lastRewardDate = todayKey();
+
+    const reward = pendingReward;
+    pendingReward = null;
+
+    if (reward === "extraGoals") {
+      state.unlocks.extraGoals = true;
+      persistAndRender();
+      toast("Открыта 2-я цель накоплений!");
+      switchScreen("goals");
+      return;
+    }
+    if (reward === "removeDailyLimit") {
+      state.unlocks.removeDailyLimit = true;
+      state.unlocks.removeDailyLimitDate = todayKey();
+      persistAndRender();
+      toast("Лимит операций снят на сегодня");
+      return;
+    }
+    persistAndRender();
+    toast("Награда получена");
+  }
+
+  function confirmProPurchase() {
+    // In-App Purchase «Убрать рекламу»: подключить через Capacitor после публикации в RuStore/Play
+    state.plan = "pro";
+    state.adsEnabled = false;
+    state.unlocks.extraGoals = true;
+    state.unlocks.removeDailyLimit = true;
+    state.unlocks.removeDailyLimitDate = todayKey();
+    closeModal($("#modal-remove-ads"));
+    persistAndRender();
+    toast("Реклама отключена. В магазине оплата подключится после публикации");
+  }
+
   /* ——— Actions ——— */
   function addOperation(e) {
     e.preventDefault();
+    if (!canAddOperation()) {
+      toast("Лимит операций на сегодня. Посмотрите рекламу");
+      closeModal($("#modal-op"));
+      openRewardSheet();
+      return;
+    }
     const form = e.target;
     const type = form.type.value;
     const name = form.name.value.trim();
@@ -498,33 +858,51 @@
       toast("Накоплено не может быть отрицательным");
       return;
     }
-    state.goal = { name, target, saved };
+
+    if (editingGoalId) {
+      const g = state.goals.find((x) => x.id === editingGoalId);
+      if (g) {
+        g.name = name;
+        g.target = target;
+        g.saved = saved;
+      }
+      editingGoalId = null;
+      toast("Цель сохранена");
+    } else {
+      if (!canAddGoal()) {
+        toast("Лимит целей. Посмотрите рекламу, чтобы открыть 2-ю");
+        openRewardSheet();
+        return;
+      }
+      state.goals.push({ id: uid(), name, target, saved });
+      toast("Цель сохранена");
+    }
+
     form.reset();
     form.goalSaved.value = "0";
-    editingGoal = false;
     persistAndRender();
-    toast("Цель сохранена");
   }
 
   function onGoalAddSubmit(e) {
     e.preventDefault();
-    if (!state.goal) return;
+    const g = state.goals.find((x) => x.id === activeGoalId) || state.goals[0];
+    if (!g) return;
     const raw = $("#goal-add-amount").value;
     const add = parseFloat(String(raw).replace(",", "."));
     if (!(add > 0)) {
       toast("Введите положительную сумму");
       return;
     }
-    state.goal.saved = (Number(state.goal.saved) || 0) + add;
+    g.saved = (Number(g.saved) || 0) + add;
     closeModal($("#modal-goal-add"));
     persistAndRender();
     toast("Накопления обновлены");
   }
 
-  function onGoalEdit() {
-    if (!state.goal) return;
-    editingGoal = true;
-    const g = state.goal;
+  function onGoalEdit(goalId) {
+    const g = state.goals.find((x) => x.id === goalId);
+    if (!g) return;
+    editingGoalId = g.id;
     $("#goal-name").value = g.name;
     $("#goal-target").value = g.target;
     $("#goal-saved").value = g.saved;
@@ -535,11 +913,12 @@
     $("#goal-name").focus();
   }
 
-  function onGoalClear() {
-    if (!state.goal) return;
-    if (!confirm("Удалить цель накоплений?")) return;
-    state.goal = null;
-    editingGoal = false;
+  function onGoalClear(goalId) {
+    const g = state.goals.find((x) => x.id === goalId);
+    if (!g) return;
+    if (!confirm("Удалить цель «" + g.name + "»?")) return;
+    state.goals = state.goals.filter((x) => x.id !== goalId);
+    if (editingGoalId === goalId) editingGoalId = null;
     elGoalForm.reset();
     $("#goal-saved").value = "0";
     persistAndRender();
@@ -599,7 +978,7 @@
     state = defaultState();
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_KEY);
-    editingGoal = false;
+    editingGoalId = null;
     elGoalForm.reset();
     $("#goal-saved").value = "0";
     persistAndRender();
@@ -680,7 +1059,9 @@
         return;
       }
       if (e.target.closest("[data-action='goal-add']")) {
-        if (!state.goal) {
+        const btn = e.target.closest("[data-action='goal-add']");
+        activeGoalId = btn.dataset.goalId || (state.goals[0] && state.goals[0].id);
+        if (!activeGoalId) {
           switchScreen("goals");
           return;
         }
@@ -690,11 +1071,13 @@
         return;
       }
       if (e.target.closest("[data-action='goal-edit']")) {
-        onGoalEdit();
+        const btn = e.target.closest("[data-action='goal-edit']");
+        onGoalEdit(btn.dataset.goalId);
         return;
       }
       if (e.target.closest("[data-action='goal-clear']")) {
-        onGoalClear();
+        const btn = e.target.closest("[data-action='goal-clear']");
+        onGoalClear(btn.dataset.goalId);
         return;
       }
       if (e.target.matches("[data-close-modal]") || e.target.closest("[data-close-modal]")) {
@@ -703,7 +1086,7 @@
     });
 
     $("#btn-goal-cancel").addEventListener("click", () => {
-      editingGoal = false;
+      editingGoalId = null;
       elGoalForm.reset();
       $("#goal-saved").value = "0";
       persistAndRender();
@@ -716,12 +1099,28 @@
     $("#btn-onboarding-done").addEventListener("click", dismissOnboarding);
     $("#btn-onboarding-skip").addEventListener("click", dismissOnboarding);
 
+    const btnConfirmPro = $("#btn-confirm-pro");
+    if (btnConfirmPro) btnConfirmPro.addEventListener("click", confirmProPurchase);
+
+    const btnRewardGoal = $("#btn-reward-extra-goal");
+    const btnRewardOps = $("#btn-reward-ops-limit");
+    if (btnRewardGoal) {
+      btnRewardGoal.addEventListener("click", () => startRewardedAd("extraGoals"));
+    }
+    if (btnRewardOps) {
+      btnRewardOps.addEventListener("click", () => startRewardedAd("removeDailyLimit"));
+    }
+
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeAllModals();
+      if (e.key === "Escape") {
+        if (!elAdOverlay.hidden) return; // нельзя закрыть рекламу
+        closeAllModals();
+      }
     });
   }
 
   /* ——— Init ——— */
+  resetDailyRewardIfNeeded();
   fillCategories();
   bind();
   persistAndRender();
