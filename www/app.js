@@ -11,7 +11,7 @@
   "use strict";
 
   const STORAGE_KEY = "moy-budget-v2";
-  const LEGACY_KEY = "liza-finance-v1";
+  const LEGACY_KEY = "liza-finance-v1" /* legacy key, do not show in UI */;
   const ONBOARD_KEY = "moy-budget-onboarded";
   const STREAK_BROKEN_KEY = "moy-budget-streak-soft";
 

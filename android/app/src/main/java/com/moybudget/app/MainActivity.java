@@ -1,4 +1,4 @@
-package com.lizacoral.moybudget;
+package com.moybudget.app;
 
 import com.getcapacitor.BridgeActivity;
 

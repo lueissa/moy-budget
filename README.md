@@ -64,7 +64,7 @@ python3 -m http.server 8080
 
 ## Android (Capacitor)
 
-- appId: `com.lizacoral.moybudget`
+- appId: `com.moybudget.app`
 - Проект: папка `android/`, веб-ассеты в `www/`
 - Debug APK: `dist/moy-budget-debug.apk` (см. также `README-ANDROID.md`)
 - Публикация в сторы: `docs/publish-stores.md`

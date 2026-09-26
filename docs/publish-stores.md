@@ -1,12 +1,12 @@
 # Публикация «Мой бюджет» в RuStore и Google Play
 
-Пошаговая шпаргалка для Лизы. Тексты описаний — в [`store-and-publish.md`](./store-and-publish.md).  
+Пошаговая шпаргалка для публикации. Тексты описаний — в [`store-and-publish.md`](./store-and-publish.md).  
 **Цена «Убрать рекламу»: 89 ₽ навсегда** (не 149).
 
 Privacy Policy (обязательный URL для сторов):  
 **https://lueissa.github.io/moy-budget/privacy.html**
 
-App ID: `com.lizacoral.moybudget`
+App ID: `com.moybudget.app`
 
 ---
 
@@ -20,14 +20,14 @@ App ID: `com.lizacoral.moybudget`
 - Debug-сборка: см. `README-ANDROID.md` и папку `dist/` (если APK собран)
 - Документы: этот файл + `store-and-publish.md`
 
-## Что делает Лиза сама
+## Что делаешь ты сама
 
-1. Регистрация в RuStore и/или Google Play Console (паспорт / карта — только у неё)
+1. Регистрация в RuStore и/или Google Play Console (паспорт / карта — только у тебя)
 2. Загрузка APK/AAB, скриншоты, возрастной рейтинг, Data safety
 3. Создание товара IAP «Убрать рекламу» = **89 ₽**
 4. Кабинет AdMob (когда подключать рекламу)
-5. Самозанятость / налоги, если включит платные покупки в RuStore
-6. Пароли и ключи подписи — **только у Лизы**, в чат не кидать
+5. Самозанятость / налоги, если включишь платные покупки в RuStore
+6. Пароли и ключи подписи — **только у тебя**, в чат не кидать
 
 ---
 
@@ -37,7 +37,7 @@ App ID: `com.lizacoral.moybudget`
 2. Зарегистрируйтесь как **физическое лицо** (нужны паспортные данные по форме RuStore).
 3. **Создать приложение**
    - Название: **Мой бюджет**
-   - Пакет / applicationId: `com.lizacoral.moybudget`
+   - Пакет / applicationId: `com.moybudget.app`
    - Категория: финансы / утилиты (как предложит форма)
 4. **Загрузка сборки**
    - Для проверки удобен **APK** (debug или release); для продакшена предпочтителен **AAB** / signed release — см. `README-ANDROID.md`.
@@ -93,9 +93,9 @@ App ID: `com.lizacoral.moybudget`
 
 - [ ] Privacy URL открывается с телефона
 - [ ] В карточке везде **89 ₽**, не 149
-- [ ] applicationId = `com.lizacoral.moybudget`
+- [ ] applicationId = `com.moybudget.app`
 - [ ] Скриншоты без чужих персональных данных
 - [ ] Data safety / реклама согласованы с фактическим релизом (если AdMob ещё нет — не обещать сбор ID «уже сейчас», либо указать «планируется» по правилам формы)
-- [ ] Keystore и пароли только у Лизы
+- [ ] Keystore и пароли только у тебя
 
 Подробные команды сборки APK/AAB — в корневом [`README-ANDROID.md`](../README-ANDROID.md).

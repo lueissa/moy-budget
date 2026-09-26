@@ -1,6 +1,6 @@
 # Android-сборка «Мой бюджет»
 
-**appId:** `com.lizacoral.moybudget`  
+**appId:** `com.moybudget.app`  
 **Название:** Мой бюджет  
 **Цена IAP «Убрать рекламу»:** 89 ₽ навсегда
 
