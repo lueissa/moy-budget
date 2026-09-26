@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1419" />
-  <meta name="description" content="Простой учёт доходов, расходов и целей накоплений" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="Личный бюджет: доходы, расходы, цели и калькуляторы — без регистрации" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Мой бюджет" />
@@ -15,178 +15,286 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="app-header">
-    <div class="app-header__row">
-      <div class="app-brand">
-        <img class="app-brand__icon" src="icon.svg" width="40" height="40" alt="" />
-        <div>
-          <div class="app-brand__title">Мой бюджет</div>
-          <div class="app-brand__sub">Личный бюджет · ₽</div>
+  <div class="app" id="app">
+    <!-- Онбординг -->
+    <div class="onboarding" id="onboarding" hidden>
+      <div class="onboarding__card">
+        <div class="onboarding__icon" aria-hidden="true">
+          <img src="icon.svg" width="72" height="72" alt="" />
         </div>
+        <h1 class="onboarding__title">Добро пожаловать<br>в «Мой бюджет»</h1>
+        <p class="onboarding__text">
+          Считайте доходы и расходы, следите за лимитами и копите на цель.
+          Всё хранится только на этом устройстве — без аккаунта и облака.
+        </p>
+        <ul class="onboarding__list">
+          <li>Баланс месяца крупно на главном экране</li>
+          <li>Быстрые кнопки «+ Доход» и «+ Расход»</li>
+          <li>Цель накоплений с прогрессом</li>
+        </ul>
+        <button type="button" class="btn primary block" id="btn-onboarding-done">Начать</button>
+        <button type="button" class="link-btn onboarding__skip" id="btn-onboarding-skip">Пропустить</button>
       </div>
-      <button type="button" class="btn-reset" id="btn-open-reset" title="Сбросить все данные">
-        Сбросить данные
+    </div>
+
+    <!-- Шапка -->
+    <header class="header">
+      <div class="header-top">
+        <div class="brand">
+          <img class="brand__icon" src="icon.svg" width="32" height="32" alt="" />
+          <span class="app-title">Мой бюджет</span>
+        </div>
+        <button type="button" class="icon-btn" id="btn-goto-more" aria-label="Ещё" title="Ещё">⋯</button>
+      </div>
+      <div class="month-nav" id="month-nav">
+        <button type="button" class="icon-btn" id="btn-month-prev" aria-label="Предыдущий месяц">‹</button>
+        <div class="month-label" id="month-label">Сентябрь 2026</div>
+        <button type="button" class="icon-btn" id="btn-month-next" aria-label="Следующий месяц">›</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Главная -->
+      <section class="screen active" id="screen-home" data-screen="home" aria-label="Главная">
+        <div class="balance-card glass">
+          <div class="balance-label">Баланс месяца</div>
+          <div class="balance-value zero" id="balance-value">0 ₽</div>
+          <div class="balance-row">
+            <div class="balance-item income">
+              <span class="balance-item-label">Доходы</span>
+              <span class="balance-item-value" id="income-total">0 ₽</span>
+            </div>
+            <div class="balance-item expense">
+              <span class="balance-item-label">Расходы</span>
+              <span class="balance-item-value" id="expense-total">0 ₽</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <button type="button" class="quick-btn expense" id="btn-quick-expense">
+            <span class="quick-icon">−</span> Расход
+          </button>
+          <button type="button" class="quick-btn income" id="btn-quick-income">
+            <span class="quick-icon">+</span> Доход
+          </button>
+        </div>
+
+        <div class="section-block" id="home-goal-block">
+          <div class="section-head">
+            <h2>Цель</h2>
+            <button type="button" class="link-btn" data-nav="goals">Все цели</button>
+          </div>
+          <div id="home-goal-preview"></div>
+        </div>
+
+        <div class="section-block" id="home-budget-block">
+          <div class="section-head">
+            <h2>Лимиты месяца</h2>
+            <button type="button" class="link-btn" id="btn-edit-budgets">Настроить</button>
+          </div>
+          <div class="budget-preview" id="home-budget-preview"></div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-head">
+            <h2>Недавние операции</h2>
+            <button type="button" class="link-btn" data-nav="ops">Все</button>
+          </div>
+          <div class="ops-list" id="home-ops-list"></div>
+        </div>
+      </section>
+
+      <!-- Операции -->
+      <section class="screen" id="screen-ops" data-screen="ops" aria-label="Операции" hidden>
+        <div class="filter-tabs" role="tablist" aria-label="Фильтр операций">
+          <button type="button" class="tab active" data-filter="all" role="tab" aria-selected="true">Все</button>
+          <button type="button" class="tab" data-filter="income" role="tab" aria-selected="false">Доходы</button>
+          <button type="button" class="tab" data-filter="expense" role="tab" aria-selected="false">Расходы</button>
+        </div>
+        <div class="ops-list" id="ops-list"></div>
+      </section>
+
+      <!-- Цели -->
+      <section class="screen" id="screen-goals" data-screen="goals" aria-label="Цели" hidden>
+        <div id="goal-view"></div>
+        <form class="form-card glass" id="form-goal" autocomplete="off">
+          <h2 class="form-card__title" id="goal-form-title">Новая цель</h2>
+          <label class="field-label" for="goal-name">Название цели</label>
+          <input class="field-input" id="goal-name" name="goalName" type="text" placeholder="Отпуск / новый телефон" maxlength="80" required />
+          <div class="form-grid">
+            <div>
+              <label class="field-label" for="goal-target">Сумма цели, ₽</label>
+              <input class="field-input" id="goal-target" name="goalTarget" type="number" inputmode="decimal" min="1" step="any" placeholder="100000" required />
+            </div>
+            <div>
+              <label class="field-label" for="goal-saved">Уже накоплено, ₽</label>
+              <input class="field-input" id="goal-saved" name="goalSaved" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="0" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn primary block">Сохранить цель</button>
+            <button type="button" class="btn secondary block" id="btn-goal-cancel" hidden>Отмена</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Ещё -->
+      <section class="screen" id="screen-more" data-screen="more" aria-label="Ещё" hidden>
+        <div class="section-block">
+          <div class="section-head"><h2>Калькуляторы</h2></div>
+          <form class="form-card glass" id="form-pct" autocomplete="off">
+            <h3 class="form-card__subtitle">Процент от суммы</h3>
+            <div class="form-grid">
+              <div>
+                <label class="field-label" for="pct-sum">Сумма, ₽</label>
+                <input class="field-input" id="pct-sum" name="sum" type="number" inputmode="decimal" min="0" step="any" placeholder="10000" required />
+              </div>
+              <div>
+                <label class="field-label" for="pct-pct">Процент, %</label>
+                <input class="field-input" id="pct-pct" name="pct" type="number" inputmode="decimal" min="0" step="any" placeholder="13" required />
+              </div>
+            </div>
+            <button type="submit" class="btn primary block">Рассчитать</button>
+            <div class="calc-result" id="pct-result" hidden></div>
+          </form>
+
+          <form class="form-card glass" id="form-monthly" autocomplete="off">
+            <h3 class="form-card__subtitle">Сколько откладывать</h3>
+            <p class="muted small">до цели за N месяцев</p>
+            <label class="field-label" for="monthly-target">Сумма цели, ₽</label>
+            <input class="field-input" id="monthly-target" name="target" type="number" inputmode="decimal" min="1" step="any" placeholder="120000" required />
+            <div class="form-grid">
+              <div>
+                <label class="field-label" for="monthly-months">Месяцев</label>
+                <input class="field-input" id="monthly-months" name="months" type="number" inputmode="numeric" min="1" step="1" placeholder="12" required />
+              </div>
+              <div>
+                <label class="field-label" for="monthly-already">Уже есть, ₽</label>
+                <input class="field-input" id="monthly-already" name="already" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="0" />
+              </div>
+            </div>
+            <button type="submit" class="btn primary block">Рассчитать</button>
+            <div class="calc-result" id="monthly-result" hidden></div>
+          </form>
+        </div>
+
+        <div class="section-block">
+          <div class="section-head"><h2>Лимиты по категориям</h2></div>
+          <div class="settings-card glass">
+            <p class="muted small">Задайте лимит расходов на месяц — прогресс появится на главной.</p>
+            <button type="button" class="btn secondary block" id="btn-edit-budgets-more">Настроить лимиты</button>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-head"><h2>Данные</h2></div>
+          <div class="settings-card glass">
+            <h3>Сброс данных</h3>
+            <p class="muted small">Удалит все операции, цель и лимиты с этого устройства. Отменить нельзя.</p>
+            <button type="button" class="btn danger block" id="btn-open-reset">Сбросить данные</button>
+          </div>
+          <div class="settings-card glass muted-card">
+            <p class="muted small">Мой бюджет · данные только на устройстве · PWA</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom tab bar -->
+    <nav class="bottom-nav" role="tablist" aria-label="Основная навигация">
+      <button type="button" class="nav-item active" data-nav="home" role="tab" aria-selected="true">
+        <span class="nav-icon" aria-hidden="true">⌂</span>
+        <span>Главная</span>
       </button>
-    </div>
-  </header>
+      <button type="button" class="nav-item" data-nav="ops" role="tab" aria-selected="false">
+        <span class="nav-icon" aria-hidden="true">☰</span>
+        <span>Операции</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="goals" role="tab" aria-selected="false">
+        <span class="nav-icon" aria-hidden="true">◎</span>
+        <span>Цели</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="more" role="tab" aria-selected="false">
+        <span class="nav-icon" aria-hidden="true">✦</span>
+        <span>Ещё</span>
+      </button>
+    </nav>
+  </div>
 
-  <section class="balance-hero" aria-live="polite">
-    <div class="balance-hero__label">Баланс месяца</div>
-    <div class="balance-hero__value zero" id="balance-value">0 ₽</div>
-    <div class="balance-hero__meta">
-      <div class="balance-meta">
-        <div class="balance-meta__label">Доходы</div>
-        <div class="balance-meta__value income" id="income-total">0 ₽</div>
-      </div>
-      <div class="balance-meta">
-        <div class="balance-meta__label">Расходы</div>
-        <div class="balance-meta__value expense" id="expense-total">0 ₽</div>
-      </div>
-    </div>
-  </section>
-
-  <nav class="tabs" role="tablist" aria-label="Разделы">
-    <button type="button" class="tab" role="tab" data-tab="budget" aria-selected="true">Бюджет</button>
-    <button type="button" class="tab" role="tab" data-tab="goal" aria-selected="false">Цель</button>
-    <button type="button" class="tab" role="tab" data-tab="calc" aria-selected="false">Калькуляторы</button>
-  </nav>
-
-  <!-- Бюджет -->
-  <section class="panel active" id="panel-budget" role="tabpanel">
-    <div class="section">
-      <div class="section__head">
-        <h2 class="section__title">Доходы</h2>
-      </div>
-      <form class="form-card" id="form-income" autocomplete="off">
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="income-name">Название</label>
-            <input id="income-name" name="name" type="text" placeholder="Зарплата" maxlength="80" required />
-          </div>
-          <div class="form-row">
-            <label for="income-amount">Сумма, ₽</label>
-            <input id="income-amount" name="amount" type="number" inputmode="decimal" min="0.01" step="any" placeholder="50000" required />
-          </div>
+  <!-- Bottom sheet: добавить операцию -->
+  <div class="modal" id="modal-op" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-op-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <h2 id="modal-op-title">Новая операция</h2>
+      <form id="form-op" autocomplete="off">
+        <input type="hidden" id="op-type" name="type" value="expense" />
+        <label class="field-label" for="op-name">Название</label>
+        <input class="field-input" id="op-name" name="name" type="text" maxlength="80" required placeholder="Например, продукты" />
+        <label class="field-label" for="op-amount">Сумма, ₽</label>
+        <input class="field-input amount-input" id="op-amount" name="amount" type="number" inputmode="decimal" min="0.01" step="any" required placeholder="0" />
+        <div id="op-category-wrap">
+          <label class="field-label" for="op-category">Категория</label>
+          <select class="field-input" id="op-category" name="category"></select>
         </div>
-        <button type="submit" class="btn-primary">Добавить доход</button>
-      </form>
-      <ul class="list" id="income-list"></ul>
-    </div>
-
-    <div class="section">
-      <div class="section__head">
-        <h2 class="section__title">Расходы</h2>
-        <span class="section__hint">по категориям</span>
-      </div>
-      <form class="form-card" id="form-expense" autocomplete="off">
-        <div class="form-row">
-          <label for="expense-name">Название</label>
-          <input id="expense-name" name="name" type="text" placeholder="Продукты" maxlength="80" required />
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" data-close-modal>Отмена</button>
+          <button type="submit" class="btn primary" id="btn-op-submit">Добавить</button>
         </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="expense-amount">Сумма, ₽</label>
-            <input id="expense-amount" name="amount" type="number" inputmode="decimal" min="0.01" step="any" placeholder="2500" required />
-          </div>
-          <div class="form-row">
-            <label for="expense-category">Категория</label>
-            <select id="expense-category" name="category" required></select>
-          </div>
-        </div>
-        <button type="submit" class="btn-primary">Добавить расход</button>
-      </form>
-      <div class="cat-summary" id="cat-summary" aria-label="Сводка по категориям"></div>
-      <ul class="list" id="expense-list"></ul>
-    </div>
-  </section>
-
-  <!-- Цель -->
-  <section class="panel" id="panel-goal" role="tabpanel">
-    <div class="section">
-      <div class="section__head">
-        <h2 class="section__title">Цель накоплений</h2>
-      </div>
-      <div id="goal-view" class="hidden"></div>
-      <form class="form-card" id="form-goal" autocomplete="off">
-        <div class="form-row">
-          <label for="goal-name">Название цели</label>
-          <input id="goal-name" name="goalName" type="text" placeholder="Отпуск / новый телефон" maxlength="80" required />
-        </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="goal-target">Сумма цели, ₽</label>
-            <input id="goal-target" name="goalTarget" type="number" inputmode="decimal" min="1" step="any" placeholder="100000" required />
-          </div>
-          <div class="form-row">
-            <label for="goal-saved">Уже накоплено, ₽</label>
-            <input id="goal-saved" name="goalSaved" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="0" />
-          </div>
-        </div>
-        <button type="submit" class="btn-primary">Сохранить цель</button>
       </form>
     </div>
-  </section>
+  </div>
 
-  <!-- Калькуляторы -->
-  <section class="panel" id="panel-calc" role="tabpanel">
-    <div class="section">
-      <div class="section__head">
-        <h2 class="section__title">Процент от суммы</h2>
-      </div>
-      <form class="form-card" id="form-pct" autocomplete="off">
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="pct-sum">Сумма, ₽</label>
-            <input id="pct-sum" name="sum" type="number" inputmode="decimal" min="0" step="any" placeholder="10000" required />
-          </div>
-          <div class="form-row">
-            <label for="pct-pct">Процент, %</label>
-            <input id="pct-pct" name="pct" type="number" inputmode="decimal" min="0" step="any" placeholder="13" required />
-          </div>
+  <!-- Bottom sheet: пополнить цель -->
+  <div class="modal" id="modal-goal-add" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-goal-add-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <h2 id="modal-goal-add-title">Отложить</h2>
+      <form id="form-goal-add" autocomplete="off">
+        <label class="field-label" for="goal-add-amount">Сумма, ₽</label>
+        <input class="field-input amount-input" id="goal-add-amount" name="amount" type="number" inputmode="decimal" min="0.01" step="any" required placeholder="1000" />
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" data-close-modal>Отмена</button>
+          <button type="submit" class="btn primary">Пополнить</button>
         </div>
-        <button type="submit" class="btn-primary">Рассчитать</button>
-        <div class="calc-result hidden" id="pct-result"></div>
       </form>
     </div>
+  </div>
 
-    <div class="section">
-      <div class="section__head">
-        <h2 class="section__title">Сколько откладывать</h2>
-        <span class="section__hint">до цели за N месяцев</span>
-      </div>
-      <form class="form-card" id="form-monthly" autocomplete="off">
-        <div class="form-row">
-          <label for="monthly-target">Сумма цели, ₽</label>
-          <input id="monthly-target" name="target" type="number" inputmode="decimal" min="1" step="any" placeholder="120000" required />
+  <!-- Bottom sheet: лимиты -->
+  <div class="modal" id="modal-budgets" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-budgets-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <h2 id="modal-budgets-title">Лимиты категорий</h2>
+      <p class="muted small" style="margin-bottom:12px">Оставьте пустым, если лимит не нужен. Суммы — на выбранный месяц.</p>
+      <form id="form-budgets" autocomplete="off">
+        <div id="budgets-fields"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" data-close-modal>Отмена</button>
+          <button type="submit" class="btn primary">Сохранить</button>
         </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="monthly-months">Месяцев</label>
-            <input id="monthly-months" name="months" type="number" inputmode="numeric" min="1" step="1" placeholder="12" required />
-          </div>
-          <div class="form-row">
-            <label for="monthly-already">Уже есть, ₽</label>
-            <input id="monthly-already" name="already" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="0" />
-          </div>
-        </div>
-        <button type="submit" class="btn-primary">Рассчитать</button>
-        <div class="calc-result hidden" id="monthly-result"></div>
       </form>
     </div>
-  </section>
+  </div>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  <div class="modal-overlay" id="reset-modal" role="dialog" aria-modal="true" aria-labelledby="reset-title">
-    <div class="modal">
+  <!-- Modal: сброс -->
+  <div class="modal" id="reset-modal" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+      <div class="modal-handle" aria-hidden="true"></div>
       <h2 id="reset-title">Сбросить данные?</h2>
-      <p>Все доходы, расходы и цель накоплений будут удалены с этого устройства. Отменить нельзя.</p>
-      <div class="modal__actions">
-        <button type="button" class="btn-secondary" id="btn-cancel-reset">Отмена</button>
-        <button type="button" class="btn-danger" id="btn-confirm-reset">Сбросить</button>
+      <p class="muted">Все доходы, расходы, цель и лимиты будут удалены с этого устройства. Отменить нельзя.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn secondary" id="btn-cancel-reset">Отмена</button>
+        <button type="button" class="btn danger" id="btn-confirm-reset">Сбросить</button>
       </div>
     </div>
   </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="app.js"></script>
 </body>

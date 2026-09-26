@@ -1,5 +1,5 @@
-/* Service worker stub — кэш ядра для офлайн / Add to Home Screen */
-const CACHE = "liza-finance-v1";
+/* Service worker — кэш ядра для офлайн / Add to Home Screen */
+const CACHE = "moy-budget-v2";
 const ASSETS = [
   "./",
   "./index.html",

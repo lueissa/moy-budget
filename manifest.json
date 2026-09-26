@@ -1,12 +1,12 @@
 {
   "name": "Мой бюджет",
   "short_name": "Бюджет",
-  "description": "Личный бюджет, расходы по категориям и цели накоплений",
+  "description": "Личный бюджет, расходы по категориям, лимиты и цели накоплений",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0f1419",
-  "theme_color": "#0f1419",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
   "lang": "ru",
   "icons": [
     {
