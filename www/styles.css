@@ -1478,3 +1478,14 @@ body.has-ad-banner .toast {
   border-color: rgba(167, 139, 250, 0.35);
   color: #c4b5fd;
 }
+
+
+/* Legal footer links (Ещё / онбординг) — keep tiny, non-intrusive */
+.legal-links a {
+  color: #5eead4;
+  text-decoration: none;
+}
+.legal-links a:hover,
+.legal-links a:focus-visible {
+  text-decoration: underline;
+}

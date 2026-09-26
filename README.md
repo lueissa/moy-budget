@@ -69,4 +69,7 @@ python3 -m http.server 8080
 - Debug APK: `dist/moy-budget-debug.apk` (см. также `README-ANDROID.md`)
 - Публикация в сторы: `docs/publish-stores.md`
 - Privacy: https://lueissa.github.io/moy-budget/privacy.html
+- Terms: https://lueissa.github.io/moy-budget/terms.html
+- Offer: https://lueissa.github.io/moy-budget/offer.html
+- Legal checklist: docs/legal-checklist.md
 - IAP «Убрать рекламу»: **89 ₽** навсегда
