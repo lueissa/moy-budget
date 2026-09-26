@@ -1,0 +1,25 @@
+node_modules/
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# Android local / build
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/captures/
+android/.idea/
+android/*.iml
+android/app/*.iml
+*.jks
+*.keystore
+keystore.properties
+
+# Capacitor generated (keep android/ source, ignore caches)
+.capacitor/
+
+# Optional local SDK drop
+/opt/

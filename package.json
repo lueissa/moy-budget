@@ -1,0 +1,33 @@
+{
+  "name": "moy-budget",
+  "version": "1.0.0",
+  "description": "Мой бюджет — PWA личный бюджет (Capacitor Android)",
+  "main": "app.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "copy:www": "mkdir -p www && cp -f index.html styles.css app.js sw.js manifest.json icon.svg privacy.html www/ 2>/dev/null; cp -f icon-512.png icon-192.png www/ 2>/dev/null; true",
+    "cap:sync": "npm run copy:www && npx cap sync android",
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:open": "npx cap open android"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lueissa/moy-budget.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lueissa/moy-budget/issues"
+  },
+  "homepage": "https://github.com/lueissa/moy-budget#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/status-bar": "^8.0.3"
+  }
+}

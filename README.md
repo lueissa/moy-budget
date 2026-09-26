@@ -61,3 +61,12 @@ python3 -m http.server 8080
 ## Данные и лицензия
 
 Все цифры остаются на устройстве пользователя. Сервер не требуется.
+
+## Android (Capacitor)
+
+- appId: `com.lizacoral.moybudget`
+- Проект: папка `android/`, веб-ассеты в `www/`
+- Debug APK: `dist/moy-budget-debug.apk` (см. также `README-ANDROID.md`)
+- Публикация в сторы: `docs/publish-stores.md`
+- Privacy: https://lueissa.github.io/moy-budget/privacy.html
+- IAP «Убрать рекламу»: **89 ₽** навсегда

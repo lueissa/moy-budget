@@ -1,0 +1,17 @@
+{
+  "appId": "com.lizacoral.moybudget",
+  "appName": "Мой бюджет",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b1220"
+    }
+  }
+}
