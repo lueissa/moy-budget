@@ -1489,3 +1489,25 @@ body.has-ad-banner .toast {
 .legal-links a:focus-visible {
   text-decoration: underline;
 }
+
+/* Rate sheet */
+.rate-sheet { text-align: center; }
+.rate-sheet__emoji { font-size: 2rem; margin: 4px 0 6px; }
+.rate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.btn-link:hover,
+.btn-link:focus-visible { color: var(--text-secondary); text-decoration: underline; }

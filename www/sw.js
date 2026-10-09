@@ -1,5 +1,5 @@
 /* Service worker — кэш ядра для офлайн / Add to Home Screen */
-const CACHE = "moy-budget-v4";
+const CACHE = "moy-budget-v5";
 const ASSETS = [
   "./",
   "./index.html",

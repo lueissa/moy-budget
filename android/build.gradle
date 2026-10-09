@@ -19,8 +19,15 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
+        mavenLocal()
         google()
         mavenCentral()
+    }
+    configurations.configureEach {
+        resolutionStrategy {
+            // Prefer cached 1.4.0; 1.3.1 AAR resolve was flaky from Google Maven in this environment
+            force 'androidx.profileinstaller:profileinstaller:1.4.0'
+        }
     }
 }
 

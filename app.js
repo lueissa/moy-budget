@@ -14,6 +14,15 @@
   const LEGACY_KEY = "liza-finance-v1" /* legacy key, do not show in UI */;
   const ONBOARD_KEY = "moy-budget-onboarded";
   const STREAK_BROKEN_KEY = "moy-budget-streak-soft";
+  const RATE_KEY = "moy-budget-rate";
+
+  /* «Оценить приложение» — мягкий запрос отзыва (без наград и фильтрации по звёздам) */
+  const RATE_URL = "https://www.rustore.ru/catalog/app/com.moybudget.app";
+  const RATE_MIN_DAYS = 7;
+  const RATE_MIN_OPS = 5;
+  const RATE_COOLDOWN_DAYS = 30;
+  const RATE_MAX_SHOWS = 3;
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
   const QUICK_CHIPS = [
     { name: "Кофе", amount: 150, category: "food", icon: "☕" },
@@ -962,6 +971,7 @@
     maybeFirstOpCelebrate();
     persistAndRender();
     toast("− " + name + " " + formatRub(amount));
+    rateAfterPositiveAction();
   }
 
   function fillDemoData() {
@@ -1042,6 +1052,123 @@
     renderGoal();
     renderSupport();
     renderAdBanner();
+  }
+
+  /* ——— Rate prompt ——— */
+  function isNativeApp() {
+    try {
+      return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function loadRate() {
+    let r = null;
+    try {
+      r = JSON.parse(localStorage.getItem(RATE_KEY) || "null");
+    } catch (_) {
+      r = null;
+    }
+    if (!r || typeof r !== "object") r = {};
+    const realOps = state.incomes.filter((i) => !i.demo).length + state.expenses.filter((x) => !x.demo).length;
+    if (!r.firstUse) {
+      // Для тех, кто обновился с 1.0: дата самой ранней реальной операции
+      let earliest = Date.now();
+      state.incomes.concat(state.expenses).forEach((o) => {
+        if (!o.demo && o.createdAt && o.createdAt < earliest) earliest = o.createdAt;
+      });
+      r.firstUse = earliest;
+    }
+    r.opsAdded = Math.max(Number(r.opsAdded) || 0, realOps);
+    r.activeDays = Number(r.activeDays) || 0;
+    r.lastActiveDay = r.lastActiveDay || "";
+    r.shownCount = Number(r.shownCount) || 0;
+    r.lastShownAt = Number(r.lastShownAt) || 0;
+    r.done = !!r.done;
+    return r;
+  }
+
+  function saveRate() {
+    try {
+      localStorage.setItem(RATE_KEY, JSON.stringify(rate));
+    } catch (_) {}
+  }
+
+  function rateTouchDay() {
+    const d = todayKey();
+    if (rate.lastActiveDay !== d) {
+      rate.lastActiveDay = d;
+      rate.activeDays += 1;
+      saveRate();
+    }
+  }
+
+  function rateEligible() {
+    const now = Date.now();
+    if (rate.done) return false;
+    if (rate.shownCount >= RATE_MAX_SHOWS) return false;
+    if (now - rate.firstUse < RATE_MIN_DAYS * DAY_MS) return false;
+    if (rate.opsAdded < RATE_MIN_OPS) return false;
+    if (rate.lastShownAt && now - rate.lastShownAt < RATE_COOLDOWN_DAYS * DAY_MS) return false;
+    return true;
+  }
+
+  function onHomeAndIdle() {
+    const home = $("#screen-home");
+    if (!home || home.hidden) return false;
+    if (elOnboarding && !elOnboarding.hidden) return false;
+    if (elCelebrate && !elCelebrate.hidden) return false;
+    if (elAdOverlay && !elAdOverlay.hidden) return false;
+    return !$$(".modal").some((m) => !m.hidden);
+  }
+
+  function showRateSheet(isTest) {
+    if (!isTest) {
+      rate.shownCount += 1;
+      rate.lastShownAt = Date.now();
+      saveRate();
+    }
+    openModal("modal-rate");
+  }
+
+  // Вызывается после позитивного действия (добавлена операция)
+  function rateAfterPositiveAction() {
+    rate.opsAdded += 1;
+    rateTouchDay();
+    saveRate();
+    if (!rateEligible()) return;
+    clearTimeout(rateAfterPositiveAction._t);
+    rateAfterPositiveAction._t = setTimeout(() => {
+      if (rateEligible() && onHomeAndIdle()) showRateSheet(false);
+    }, 2400);
+  }
+
+  function openRateUrl() {
+    if (isNativeApp()) {
+      // Capacitor перехватывает переход на внешний хост и открывает его через Intent (RuStore/браузер)
+      window.location.href = RATE_URL;
+      return;
+    }
+    const w = window.open(RATE_URL, "_blank", "noopener");
+    if (!w) window.location.href = RATE_URL;
+  }
+
+  function rateNow() {
+    rate.done = true;
+    saveRate();
+    closeModal($("#modal-rate"));
+    openRateUrl();
+  }
+
+  function rateLater() {
+    closeModal($("#modal-rate"));
+  }
+
+  function rateNever() {
+    rate.done = true;
+    saveRate();
+    closeModal($("#modal-rate"));
   }
 
   /* ——— Navigation ——— */
@@ -1269,6 +1396,7 @@
     touchStreak(false);
     maybeFirstOpCelebrate();
     persistAndRender();
+    rateAfterPositiveAction();
   }
 
   function saveGoal(e) {
@@ -1604,6 +1732,16 @@
       btnRewardOps.addEventListener("click", () => startRewardedAd("removeDailyLimit"));
     }
 
+    const btnRateNow = $("#btn-rate-now");
+    if (btnRateNow) btnRateNow.addEventListener("click", rateNow);
+    const btnRateLater = $("#btn-rate-later");
+    if (btnRateLater) btnRateLater.addEventListener("click", rateLater);
+    const btnRateNever = $("#btn-rate-never");
+    if (btnRateNever) btnRateNever.addEventListener("click", rateNever);
+    const btnRateMore = $("#btn-rate-app");
+    // Постоянный пункт в «Ещё»: просто открывает страницу, на авто-показ не влияет
+    if (btnRateMore) btnRateMore.addEventListener("click", openRateUrl);
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (!elAdOverlay.hidden) return; // нельзя закрыть рекламу
@@ -1619,6 +1757,18 @@
   bind();
   touchStreak(true);
   persistAndRender();
+
+  const rate = loadRate();
+  rateTouchDay();
+  saveRate();
+
+  // Отладка (только веб-демо): ?ratetest=1 принудительно показывает окно оценки
+  if (!isNativeApp() && /[?&]ratetest=1(&|$)/.test(window.location.search)) {
+    setTimeout(() => {
+      if (elOnboarding) elOnboarding.hidden = true;
+      showRateSheet(true);
+    }, 600);
+  }
 
   if (!localStorage.getItem(ONBOARD_KEY)) {
     showOnboardStep(1);

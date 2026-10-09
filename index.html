@@ -253,6 +253,11 @@
             <p class="muted small">Удалит все операции, цель и лимиты с этого устройства. Отменить нельзя.</p>
             <button type="button" class="btn danger block" id="btn-open-reset">Сбросить данные</button>
           </div>
+          <div class="settings-card glass">
+            <h3>Оценить приложение</h3>
+            <p class="muted small">Поделитесь впечатлением в RuStore — любой честный отзыв помогает.</p>
+            <button type="button" class="btn secondary block" id="btn-rate-app">Оценить приложение</button>
+          </div>
           <div class="settings-card glass muted-card">
             <p class="muted small">Мой бюджет · данные только на устройстве · PWA</p>
             <p class="legal-links muted small" style="margin-top:8px">
@@ -365,6 +370,22 @@
     </div>
   </div>
 
+
+  <!-- Bottom sheet: оценить приложение -->
+  <div class="modal" id="modal-rate" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-sheet rate-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-rate-title">
+      <div class="modal-handle" aria-hidden="true"></div>
+      <div class="rate-sheet__emoji" aria-hidden="true">💚</div>
+      <h2 id="modal-rate-title">Нравится «Мой бюджет»?</h2>
+      <p class="muted">Если приложение помогает, оставьте отзыв — это очень помогает независимому разработчику.</p>
+      <div class="rate-actions">
+        <button type="button" class="btn primary block" id="btn-rate-now">Оценить</button>
+        <button type="button" class="btn secondary block" id="btn-rate-later">Позже</button>
+        <button type="button" class="btn-link" id="btn-rate-never">Больше не спрашивать</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Overlay: имитация rewarded-рекламы -->
   <div class="ad-overlay" id="ad-overlay" hidden>
